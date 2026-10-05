@@ -12,6 +12,10 @@ on:
         default: win-x64
         type: choice
         options: [win-x64, mac-arm64, mac-x64]
+      build_version:
+        description: Versión común de los instaladores (vacío usa numeración automática)
+        required: false
+        type: string
       enable_updates:
         description: Activar actualizaciones (requiere repositorio de instaladores público)
         type: boolean
@@ -24,6 +28,7 @@ jobs:
     timeout-minutes: 90
     env:
       DSH_TELEMETRY_DISABLED: '1'
+      DSH_DESKTOP_BUILD_VERSION: ${{ inputs.build_version }}
     steps:
       - uses: actions/checkout@v4
         with:
