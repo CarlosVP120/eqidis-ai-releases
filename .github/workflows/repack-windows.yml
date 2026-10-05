@@ -1,0 +1,99 @@
+name: Validar interfaz y reconstruir instalador Windows
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Commit completo con cambios solo del instalador
+        required: true
+        type: string
+      source_run:
+        description: Ejecución exitosa con el programa Windows ya verificado
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+jobs:
+  installer:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      DSH_DESKTOP_APP_ID: com.eqidis.ai
+      DSH_DESKTOP_UNSIGNED: '1'
+      DSH_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: CarlosVP120/deepseek-harness
+          ref: ${{ inputs.source_ref }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '11.7.0'
+      - name: Dependencias
+        run: pnpm install --frozen-lockfile
+      - name: Recuperar programa verificado
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN: ${{ inputs.source_run }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $run = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:SOURCE_RUN" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or $run.conclusion -ne 'success') { throw 'La compilación base no pasó sus pruebas' }
+          gh run download $env:SOURCE_RUN --repo $env:GITHUB_REPOSITORY --dir "$env:RUNNER_TEMP/source-installer"
+          if ($LASTEXITCODE -ne 0) { throw 'No se pudo descargar el instalador base' }
+          $files = @(Get-ChildItem "$env:RUNNER_TEMP/source-installer" -Recurse -Filter '*-win-x64-unsigned.exe')
+          if ($files.Count -ne 1) { throw 'Se esperaba un único instalador Windows' }
+          $payload = "$env:RUNNER_TEMP/eqidis-payload"
+          $setup = Start-Process $files[0].FullName -ArgumentList "/S /D=$payload" -Wait -PassThru
+          if ($setup.ExitCode -ne 0) { throw "La instalación base falló: $($setup.ExitCode)" }
+          if (!(Test-Path "$payload/EQIDIS AI.exe")) { throw 'Falta el programa instalado' }
+          (Get-FileHash "$payload/resources/app.asar" -Algorithm SHA256).Hash | Set-Content "$env:RUNNER_TEMP/payload-sha256"
+          Remove-Item "$payload/Uninstall EQIDIS AI.exe"
+          "DSH_DESKTOP_APP_ID=com.eqidis.ai" | Set-Content apps/desktop/.env.windows
+      - name: Probar interfaz en español, inglés y chino
+        run: pnpm --dir apps/desktop run test:installer
+      - name: Reconstruir solamente el instalador
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File apps/desktop/scripts/prepare-windows-installer.ps1 -OutputDirectory apps/desktop/.desktop-build/targets/win-x64/installer-ui
+          if ($LASTEXITCODE -ne 0) { throw 'No se pudieron preparar los recursos nativos' }
+          @'
+          import { build, Platform, Arch } from 'electron-builder'
+          import { createElectronBuilderConfig } from '../scripts/electron-builder-config.mjs'
+          import { join } from 'node:path'
+          const config = createElectronBuilderConfig(process.env, 'win32', 'x64')
+          await build({ projectDir: process.cwd(), prepackaged: join(process.env.RUNNER_TEMP, 'eqidis-payload'),
+            targets: Platform.WINDOWS.createTarget(['nsis'], Arch.x64), publish: 'never',
+            config: { ...config, beforeBuild: undefined, afterPack: undefined, afterSign: undefined, artifactBuildCompleted: undefined } })
+          '@ | Set-Content apps/desktop/.desktop-build/repack-windows.mjs
+          Push-Location apps/desktop
+          try { node .desktop-build/repack-windows.mjs; if ($LASTEXITCODE -ne 0) { throw 'No se pudo reconstruir el instalador' } } finally { Pop-Location }
+      - name: Verificar instalación final y conservación del programa
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $files = @(Get-ChildItem apps/desktop/.desktop-build/targets/win-x64/unsigned-artifacts -Filter '*.exe')
+          if ($files.Count -ne 1) { throw 'Se esperaba un instalador final' }
+          $payload = "$env:RUNNER_TEMP/eqidis-final"
+          $setup = Start-Process $files[0].FullName -ArgumentList "/S /D=$payload" -Wait -PassThru
+          if ($setup.ExitCode -ne 0) { throw "El instalador final falló: $($setup.ExitCode)" }
+          $original = (Get-Content "$env:RUNNER_TEMP/payload-sha256").Trim()
+          $actual = (Get-FileHash "$payload/resources/app.asar" -Algorithm SHA256).Hash
+          if ($actual -ne $original) { throw 'El programa cambió durante la reconstrucción del instalador' }
+          Write-Output 'Instalador final verificado; programa idéntico al que pasó los smokes de Windows.'
+      - name: Conservar instalador y capturas de validación
+        uses: actions/upload-artifact@v4
+        with:
+          name: eqidis-ai-windows-installer-${{ github.run_number }}
+          path: |
+            apps/desktop/.desktop-build/targets/win-x64/unsigned-artifacts/*.exe
+            apps/desktop/.desktop-build/installer-tests/**/*.png
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
