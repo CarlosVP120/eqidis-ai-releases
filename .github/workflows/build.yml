@@ -12,6 +12,10 @@ on:
         default: win-x64
         type: choice
         options: [win-x64, mac-arm64, mac-x64]
+      enable_updates:
+        description: Activar actualizaciones (requiere repositorio de instaladores público)
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -38,11 +42,19 @@ jobs:
         shell: bash
         env:
           TARGET: ${{ inputs.target }}
+          ENABLE_UPDATES: ${{ inputs.enable_updates }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           if [ "$TARGET" = win-x64 ]; then
-            printf 'DSH_DESKTOP_APP_ID=com.eqidis.ai\n' > apps/desktop/.env.windows
+            CONFIG=apps/desktop/.env.windows
+            printf 'DSH_DESKTOP_APP_ID=com.eqidis.ai\n' > "$CONFIG"
           else
-            printf 'DSH_DESKTOP_APP_ID=com.eqidis.ai\n' > apps/desktop/.env.macos
+            CONFIG=apps/desktop/.env.macos
+            printf 'DSH_DESKTOP_APP_ID=com.eqidis.ai\n' > "$CONFIG"
+          fi
+          if [ "$ENABLE_UPDATES" = true ]; then
+            test "$(gh api "repos/$GITHUB_REPOSITORY" --jq .private)" = false || { echo 'El canal sin login requiere instaladores públicos'; exit 1; }
+            printf 'DSH_DESKTOP_INTERNAL_UPDATE_REPOSITORY=%s\n' "$GITHUB_REPOSITORY" >> "$CONFIG"
           fi
       - name: Construir y comprobar el runtime instalado
         shell: bash
@@ -57,5 +69,7 @@ jobs:
             apps/desktop/.desktop-build/targets/${{ inputs.target }}/unsigned-artifacts/*.exe
             apps/desktop/.desktop-build/targets/${{ inputs.target }}/unsigned-artifacts/*.dmg
             apps/desktop/.desktop-build/targets/${{ inputs.target }}/unsigned-artifacts/*.zip
+            apps/desktop/.desktop-build/targets/${{ inputs.target }}/unsigned-artifacts/*.yml
+            apps/desktop/.desktop-build/targets/${{ inputs.target }}/unsigned-artifacts/*.blockmap
           if-no-files-found: error
           retention-days: 30
