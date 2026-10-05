@@ -56,6 +56,26 @@ jobs:
             test "$(gh api "repos/$GITHUB_REPOSITORY" --jq .private)" = false || { echo 'El canal sin login requiere instaladores públicos'; exit 1; }
             printf 'DSH_DESKTOP_INTERNAL_UPDATE_REPOSITORY=%s\n' "$GITHUB_REPOSITORY" >> "$CONFIG"
           fi
+      - name: Firma autofirmada de Mac
+        if: inputs.target != 'win-x64'
+        shell: bash
+        env:
+          P12_BASE64: ${{ secrets.MAC_CS_P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.MAC_CS_P12_PASSWORD }}
+        run: |
+          test -n "$P12_BASE64" && test -n "$P12_PASSWORD"
+          umask 077
+          KEYCHAIN="$RUNNER_TEMP/eqidis-signing.keychain-db"
+          KC_PASSWORD="$(openssl rand -hex 24)"
+          echo "::add-mask::$KC_PASSWORD"
+          printf '%s' "$P12_BASE64" | base64 --decode > "$RUNNER_TEMP/eqidis-identity.p12"
+          security create-keychain -p "$KC_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 7200 "$KEYCHAIN"
+          security unlock-keychain -p "$KC_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/eqidis-identity.p12" -k "$KEYCHAIN" -P "$P12_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KC_PASSWORD" "$KEYCHAIN" >/dev/null
+          printf 'DSH_DESKTOP_MACOS_LOCAL_SIGNING_IDENTITY="EQIDIS AI Self-Signed"\nDSH_DESKTOP_MACOS_LOCAL_SIGNING_KEYCHAIN=%s\n' "$KEYCHAIN" >> apps/desktop/.env.macos
+          rm "$RUNNER_TEMP/eqidis-identity.p12"
       - name: Construir y comprobar el runtime instalado
         shell: bash
         env:
