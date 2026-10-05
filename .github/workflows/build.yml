@@ -15,7 +15,7 @@ on:
       enable_updates:
         description: Activar actualizaciones (requiere repositorio de instaladores público)
         type: boolean
-        default: false
+        default: true
 permissions:
   contents: read
 jobs:
@@ -95,7 +95,7 @@ jobs:
         env:
           TARGET: ${{ inputs.target }}
         run: pnpm --dir apps/desktop run "package:${TARGET//-/:}:unsigned"
-      - name: Conservar instaladores privados
+      - name: Conservar instaladores
         uses: actions/upload-artifact@v4
         with:
           name: eqidis-ai-${{ inputs.target }}-${{ github.run_number }}
