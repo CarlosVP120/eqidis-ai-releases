@@ -79,6 +79,17 @@ jobs:
       - name: Validar interfaz Windows en los tres idiomas
         if: inputs.target == 'win-x64'
         run: pnpm --dir apps/desktop run test:installer
+      - name: Conservar capturas de la interfaz Windows
+        if: always() && inputs.target == 'win-x64'
+        uses: actions/upload-artifact@v4
+        with:
+          name: eqidis-ai-windows-ui-${{ github.run_number }}
+          path: |
+            apps/desktop/.desktop-build/installer-tests/**/*.png
+            apps/desktop/.desktop-build/installer-tests/**/results.json
+          if-no-files-found: warn
+          compression-level: 0
+          retention-days: 30
       - name: Construir y comprobar el runtime instalado
         shell: bash
         env:
