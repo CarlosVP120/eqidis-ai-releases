@@ -6,7 +6,7 @@ Repositorio privado de instaladores para empleados autorizados. El código está
 
 Descarga el instalador de Releases. En Mac, abre el DMG y copia EQIDIS AI a Aplicaciones. Si macOS bloquea la primera apertura por no estar notarizada, usa Ajustes del Sistema → Privacidad y seguridad → Abrir igualmente para esta aplicación de confianza. En Windows, ejecuta el instalador; puede aparecer un aviso de editor desconocido. Las políticas de cada equipo pueden impedir la instalación y deben revisarse con su administrador.
 
-Configura tu clave en Ajustes → Modelos → OpenRouter. Los proyectos y archivos se guardan localmente. Para actualizar, cierra la aplicación e instala la nueva versión desde Releases. Los instaladores internos no consultan los servidores de DeepSeek ni incorporan un token compartido para GitHub. Las descargas privadas requieren una cuenta de GitHub con acceso concedido a este repositorio.
+Configura tu clave en Ajustes → Modelos → OpenRouter. Los proyectos y archivos se guardan localmente. Para actualizar, cierra la aplicación e instala la nueva versión desde Releases. Los instaladores internos no consultan el canal de actualización de DeepSeek ni incorporan un token compartido para GitHub. Las descargas privadas requieren una cuenta de GitHub con acceso concedido a este repositorio.
 
 ## Construcción
 
