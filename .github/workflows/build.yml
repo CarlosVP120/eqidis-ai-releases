@@ -1,0 +1,61 @@
+name: Instaladores internos
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Commit del fork validado
+        required: true
+        type: string
+      target:
+        description: Equipo destino
+        required: true
+        default: win-x64
+        type: choice
+        options: [win-x64, mac-arm64, mac-x64]
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: ${{ inputs.target == 'win-x64' && 'windows-latest' || inputs.target == 'mac-x64' && 'macos-15-intel' || 'macos-15' }}
+    timeout-minutes: 90
+    env:
+      DSH_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: CarlosVP120/deepseek-harness
+          ref: ${{ inputs.source_ref }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '11.7.0'
+      - name: Dependencias
+        run: pnpm install --frozen-lockfile
+      - name: Configuración interna sin credenciales
+        shell: bash
+        env:
+          TARGET: ${{ inputs.target }}
+        run: |
+          if [ "$TARGET" = win-x64 ]; then
+            printf 'DSH_DESKTOP_APP_ID=com.eqidis.ai\n' > apps/desktop/.env.windows
+          else
+            printf 'DSH_DESKTOP_APP_ID=com.eqidis.ai\n' > apps/desktop/.env.macos
+          fi
+      - name: Construir y comprobar el runtime instalado
+        shell: bash
+        env:
+          TARGET: ${{ inputs.target }}
+        run: pnpm --dir apps/desktop run "package:${TARGET//-/:}:unsigned"
+      - name: Conservar instaladores privados
+        uses: actions/upload-artifact@v4
+        with:
+          name: eqidis-ai-${{ inputs.target }}-${{ github.run_number }}
+          path: |
+            apps/desktop/.desktop-build/targets/${{ inputs.target }}/unsigned-artifacts/*.exe
+            apps/desktop/.desktop-build/targets/${{ inputs.target }}/unsigned-artifacts/*.dmg
+            apps/desktop/.desktop-build/targets/${{ inputs.target }}/unsigned-artifacts/*.zip
+          if-no-files-found: error
+          retention-days: 30
