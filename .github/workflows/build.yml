@@ -72,8 +72,21 @@ jobs:
           security create-keychain -p "$KC_PASSWORD" "$KEYCHAIN"
           security set-keychain-settings -lut 7200 "$KEYCHAIN"
           security unlock-keychain -p "$KC_PASSWORD" "$KEYCHAIN"
-          security import "$RUNNER_TEMP/eqidis-identity.p12" -k "$KEYCHAIN" -P "$P12_PASSWORD" -T /usr/bin/codesign
+          security import "$RUNNER_TEMP/eqidis-identity.p12" -k "$KEYCHAIN" -P "$P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KC_PASSWORD" "$KEYCHAIN" >/dev/null
+          # Igual que FiscalCFDI: confianza para codeSign solo en el corredor efímero.
+          openssl pkcs12 -in "$RUNNER_TEMP/eqidis-identity.p12" -clcerts -nokeys -passin env:P12_PASSWORD -out "$RUNNER_TEMP/eqidis-signing.crt"
+          sudo security add-trusted-cert -d -r trustRoot -p codeSign -k /Library/Keychains/System.keychain "$RUNNER_TEMP/eqidis-signing.crt"
+          export EQIDIS_SIGNING_KEYCHAIN="$KEYCHAIN"
+          python3 - <<'PY'
+          import os, shlex, subprocess
+          existing = shlex.split(subprocess.check_output(['security', 'list-keychains', '-d', 'user'], text=True))
+          subprocess.run(['security', 'list-keychains', '-d', 'user', '-s', os.environ['EQIDIS_SIGNING_KEYCHAIN'], *existing], check=True)
+          PY
+          security find-identity -v -p codesigning "$KEYCHAIN"
+          cp /bin/echo "$RUNNER_TEMP/eqidis-signing-probe"
+          codesign --force --sign 'EQIDIS AI Self-Signed' --keychain "$KEYCHAIN" --timestamp=none --identifier com.eqidis.ai "$RUNNER_TEMP/eqidis-signing-probe"
+          codesign --verify --strict "$RUNNER_TEMP/eqidis-signing-probe"
           printf 'DSH_DESKTOP_MACOS_LOCAL_SIGNING_IDENTITY="EQIDIS AI Self-Signed"\nDSH_DESKTOP_MACOS_LOCAL_SIGNING_KEYCHAIN=%s\n' "$KEYCHAIN" >> apps/desktop/.env.macos
           rm "$RUNNER_TEMP/eqidis-identity.p12"
       - name: Validar interfaz Windows en los tres idiomas
