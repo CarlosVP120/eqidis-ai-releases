@@ -10,6 +10,8 @@ Configura tu clave en Ajustes → Modelos → OpenRouter. Los proyectos y archiv
 
 ## Construcción
 
-En Actions → Instaladores internos → Run workflow, introduce el commit validado del fork y selecciona win-x64, mac-arm64 o mac-x64. Los instaladores se conservan como artefactos privados durante 30 días; publícalos en Releases para conservarlos. Los corredores están sujetos a la cuota de Actions de la cuenta.
+En Actions → Instaladores internos → Run workflow, introduce el identificador completo (40 caracteres) del commit validado del fork y selecciona win-x64, mac-arm64 o mac-x64. Los instaladores se conservan como artefactos privados durante 30 días; publícalos en Releases para conservarlos. Los corredores están sujetos a la cuota de Actions de la cuenta.
 
-Mac se firma ad hoc sin certificado de pago. También se puede seleccionar una identidad de certificado autofirmado instalada mediante DSH_DESKTOP_MACOS_LOCAL_SIGNING_IDENTITY; conserva ese certificado entre versiones. La firma local no constituye notarización de Apple.
+Mac usa el certificado autofirmado «EQIDIS AI Self-Signed», guardado como secretos de este repositorio e importado en un llavero temporal del corredor. Conserva este certificado entre versiones; no publiques su clave privada. Las compilaciones locales también admiten firma ad hoc. Ninguna de estas opciones necesita un certificado de pago ni constituye notarización de Apple.
+
+El canal automático usa el mismo mecanismo de GitHub Releases que FiscalCFDI y puede activarse con `enable_updates`. Este canal sin login requiere que los instaladores sean públicos; el workflow comprueba esa condición y falla antes de construir si el repositorio sigue privado. Mantén `enable_updates` desactivado mientras la distribución sea privada.
