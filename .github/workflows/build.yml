@@ -112,7 +112,12 @@ jobs:
         shell: bash
         env:
           TARGET: ${{ inputs.target }}
-        run: pnpm --dir apps/desktop run "package:${TARGET//-/:}:unsigned"
+        run: |
+          BUILD_ARGS=()
+          if [ -n "$DSH_DESKTOP_BUILD_VERSION" ]; then
+            BUILD_ARGS=(--build-version "$DSH_DESKTOP_BUILD_VERSION")
+          fi
+          pnpm --dir apps/desktop run "package:${TARGET//-/:}:unsigned" "${BUILD_ARGS[@]}"
       - name: Conservar instaladores
         uses: actions/upload-artifact@v4
         with:
