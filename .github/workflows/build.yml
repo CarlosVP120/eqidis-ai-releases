@@ -118,6 +118,25 @@ jobs:
             BUILD_ARGS=(--build-version "$DSH_DESKTOP_BUILD_VERSION")
           fi
           pnpm --dir apps/desktop run "package:${TARGET//-/:}:unsigned" "${BUILD_ARGS[@]}"
+      - name: Validar versión de los instaladores
+        shell: bash
+        env:
+          TARGET: ${{ inputs.target }}
+        run: |
+          node --input-type=module <<'JS'
+          import { readFileSync } from 'node:fs';
+          import { resolve } from 'node:path';
+          import { createRequire } from 'node:module';
+          const require = createRequire(resolve('apps/desktop/package.json'));
+          const { load } = require('js-yaml');
+          const target = process.env.TARGET;
+          const filename = target.startsWith('mac-') ? 'nightly-mac.yml' : 'nightly.yml';
+          const metadata = load(readFileSync(`apps/desktop/.desktop-build/targets/${target}/unsigned-artifacts/${filename}`, 'utf8'));
+          const expected = process.env.DSH_DESKTOP_BUILD_VERSION;
+          if (expected && metadata.version !== expected) throw new Error(`Installer version ${metadata.version} differs from ${expected}`);
+          if (!metadata.files.length || metadata.files.some(file => !file.url.includes(`-${metadata.version}-`))) throw new Error('Installer filenames and update metadata differ');
+          console.log(`Verified installer version: ${metadata.version}`);
+          JS
       - name: Conservar instaladores
         uses: actions/upload-artifact@v4
         with:
